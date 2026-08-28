@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Mikayla's Auto-Drain",
+  "name": "Relapse Bait's Auto-Drain",
   "version": "3.0.0",
-  "description": "Auto-drain extension for Mikayla's Throne",
+  "description": "Auto-drain extension for Relapse Bait's Throne",
   "permissions": ["tabs", "scripting", "activeTab", "storage", "offscreen"],
   "background": {
     "service_worker": "background.js"
@@ -15,7 +15,7 @@
     "128": "icons/icon.png"
   },
   "action": {
-    "default_title": "Mikayla's Auto-Drain~",
+    "default_title": "Relapse Bait's Auto-Drain~",
     "default_icon": {
       "16": "icons/icon.png",
       "32": "icons/icon.png",
