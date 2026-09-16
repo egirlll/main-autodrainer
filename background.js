@@ -1,4 +1,5 @@
 const tabsAPI = typeof chrome !== 'undefined' && chrome.tabs ? chrome.tabs : browser.tabs;
+const THRONE_USER = "relapsebaitt";
 
 // Allow content scripts to access session storage
 chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
@@ -37,7 +38,7 @@ function openDrainTab() {
   if (openingTab || activeTabId) return;
   openingTab = true;
 
-  tabsAPI.create({ url: 'https://throne.com/onemoresend' }, (tab) => {
+  tabsAPI.create({ url: `https://throne.com/${THRONE_USER}` }, (tab) => {
     openingTab = false;
     if (!tab) return;
     activeTabId = tab.id;

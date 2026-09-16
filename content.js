@@ -20,9 +20,9 @@ let spawningPaused = false;
 let awaitingSelection = false;
 let randomModeActive = false;
 let checkoutCounted = false;
-let balanceChecked = false;
 let lockdownActive = false;
 let stallTimerActive = false;
+let isPaying = false;
 
 let routeChangeCount = 0;
 let totalDrained = 0;
@@ -958,80 +958,39 @@ function isElementReady(el) {
   return true;
 }
 
-// Find the card container for a given item link by walking up to the smallest
-// ancestor that contains an "Add to cart" button scoped to only that item's href
-function findCardForLink(link, href) {
-  let card = link.parentElement;
-  while (card) {
-    const btn = [...card.querySelectorAll('button[type="button"]')].find(
-      b => b.textContent.trim().toLowerCase() === "add to cart"
-    );
-    if (btn) {
-      // Verify this ancestor only contains links to this item
-      const cardLinks = card.querySelectorAll('a[href*="/item/"]');
-      let scoped = true;
-      for (const cl of cardLinks) {
-        if (cl.getAttribute("href") !== href) { scoped = false; break; }
-      }
-      if (scoped) return card;
-    }
-    card = card.parentElement;
-  }
-  return null;
-}
-
 // Get items from page
 function buildItemsFromPage() {
   const items = [];
   const emojis = {};
   const prices = {};
 
-  // Gather unique item hrefs from the page
-  const itemLinks = document.querySelectorAll('a[href*="/item/"]');
-  const hrefSet = new Set();
-  for (const link of itemLinks) {
-    hrefSet.add(link.getAttribute("href"));
-  }
+  // Each gift card is now explicitly marked with data-slot="card"
+  const cards = document.querySelectorAll('[data-slot="card"]');
 
-  for (const href of hrefSet) {
-    // Get all links for this specific item
-    const linksForItem = document.querySelectorAll(`a[href="${href}"]`);
+  for (const card of cards) {
+    // Product name
+    const nameEl = card.querySelector(
+      '[data-slot="product-card-info"] span[data-slot="tooltip-trigger"]'
+    );
 
-    let heading = "";
-    let emoji = "";
-
-    for (const link of linksForItem) {
-      const p = link.querySelector("p");
-      if (!p) continue;
-      const text = p.textContent.trim();
-      if (text.length <= 2) {
-        if (!emoji) emoji = text;
-      } else {
-        if (!heading) heading = text;
-      }
-    }
-
+    const heading = nameEl?.textContent.trim() || "";
     if (!heading) continue;
 
-    // Walk up from the name link to find the smallest ancestor containing an "Add to cart" button
-    const nameLink = [...linksForItem].find(l => {
-      const p = l.querySelector("p");
-      return p && p.textContent.trim() === heading;
-    });
-    if (!nameLink) continue;
+    // Emoji
+    const emojiEl = card.querySelector(
+      '[data-slot="product-card-image"] [role="img"] span'
+    );
 
-    const card = findCardForLink(nameLink, href);
-    if (!card) continue;
+    const emoji = emojiEl?.textContent.trim() || "";
 
-    // Price — first <span> containing a number, outside buttons
-    const allSpans = card.querySelectorAll("span");
-    let price = '';
-    for (const span of allSpans) {
-      if (span.closest("button")) continue;
-      const spanText = span.textContent.trim();
-      if (/\d+([.,]\d+)?/.test(spanText)) { price = spanText; break; }
-    }
+    // Price
+    const priceEl = card.querySelector(
+      '[data-slot="product-card-price-row"] span[data-slot="tooltip-trigger"]'
+    );
 
+    const price = priceEl?.textContent.trim() || "";
+
+    // Avoid duplicates
     if (!items.includes(heading)) {
       items.push(heading);
       emojis[heading] = emoji;
@@ -1045,7 +1004,10 @@ function buildItemsFromPage() {
 
   // Persist for pages where the DOM doesn't have the gift cards
   if (items.length > 0) {
-    chrome.storage.session.set({ OMSD_ALLOWED_ITEMS: items, OMSD_ITEM_PRICES: prices });
+    chrome.storage.session.set({
+      OMSD_ALLOWED_ITEMS: items,
+      OMSD_ITEM_PRICES: prices
+    });
   }
 
   return items.map(name => ({
@@ -1167,20 +1129,25 @@ function clickAddToCart() {
   setTimeout(() => {
     if (!selectedItem) return;
 
-    const itemLinks = document.querySelectorAll('a[href*="/item/"]');
-    for (const link of itemLinks) {
-      const p = link.querySelector("p");
-      if (!p) continue;
-      const text = p.textContent.trim();
-      if (text.length <= 2 || text !== selectedItem) continue;
+    const cards = document.querySelectorAll('[data-slot="card"]');
 
-      const href = link.getAttribute("href");
-      const card = findCardForLink(link, href);
-      if (!card) continue;
-
-      const btn = [...card.querySelectorAll('button[type="button"]')].find(
-        b => b.textContent.trim().toLowerCase() === "add to cart" && !b.disabled
+    for (const card of cards) {
+      // Product name
+      const nameEl = card.querySelector(
+        '[data-slot="product-card-info"] span[data-slot="tooltip-trigger"]'
       );
+
+      const name = nameEl?.textContent.trim() || "";
+
+      if (name !== selectedItem) continue;
+
+      // Find the enabled Add to cart button
+      const btn = [...card.querySelectorAll('button[type="button"]')].find(
+        b =>
+          b.textContent.trim().toLowerCase() === "add to cart" &&
+          !b.disabled
+      );
+
       if (btn) {
         btn.click();
         return;
@@ -1230,28 +1197,47 @@ function setToggles(configs) {
   return toggled;
 }
 
+function selectCreditCard() {
+  let option = null;
+  const svg = document.querySelector("svg.lucide-credit-card");
+  if (svg) option = svg.closest("button[role='radio']");
+
+  // If can't find SVG, look for "Credit Card" text
+  if (!option) {
+    const radios = document.querySelectorAll("button[role='radio']");
+    for (const radio of radios) {
+      if (radio.textContent.toLowerCase().trim().includes("credit card")) { option = radio; break; }
+    }
+  }
+
+  // Payment methods haven't loaded yet, we'll return false and try again next loop
+  if (!option) return false;
+
+  // If already selected, return true
+  if (option.getAttribute("aria-checked") === "true") return true;
+
+  // Otherwise click it & verify selected
+  option.click();
+  return option.getAttribute("aria-checked") === "true";
+}
+
 // Click pay now
 function clickPayNow() {
-  const toggled = setToggles([
-    { label: "Instant Payout", on: true },
-    { label: "Shipping Protection", on: true },
-    { label: "Throne Balance", on: true },
-  ]);
+  if (isPaying) return;
+  isPaying = true;
 
-  if (!toggled) return;
+  const checkPayEnabled = setInterval(() => {
+    const btn = [...document.querySelectorAll("button")].find(
+      btn =>
+        btn.textContent.trim().toLowerCase() === "pay now" &&
+        !btn.disabled
+    );
 
-  setTimeout(() => {
-    const buttons = document.querySelectorAll("button");
-    for (const btn of buttons) {
-      const span = btn.querySelector("span");
-      if (span && span.textContent.trim().toLowerCase() === "pay now" && !btn.disabled) {
-        setTimeout(() => {
-          btn.click();
-          return;
-        }, 4000);
-      }
+    if (btn) {
+      clearInterval(checkPayEnabled);
+      btn.click();
     }
-  }, 2000);
+  }, 500);
 }
 
 // Detect route
@@ -1343,30 +1329,6 @@ function checkForDecline() {
   }
 }
 
-function checkLowBalance() {
-  if (balanceChecked) return;
-
-  const balanceToggle = findToggleByLabel("Throne Balance");
-  if (!balanceToggle || !balanceToggle.checked) return;
-
-  balanceChecked = true;
-
-  setTimeout(() => {
-    if (lastDetectedRoute !== 'checkout') { balanceChecked = false; return; }
-    if (document.getElementById('decline-overlay')) return;
-
-    const buttons = document.querySelectorAll("button");
-    for (const btn of buttons) {
-      const span = btn.querySelector("span");
-      if (span && span.textContent.trim().toLowerCase() === "pay now" && btn.disabled) {
-        showDeclineOverlay();
-        return;
-      }
-    }
-    balanceChecked = false;
-  }, 12000);
-}
-
 // Main loop
 function mainLoop() {
   if (checkUrlGuard()) {
@@ -1376,6 +1338,9 @@ function mainLoop() {
   const currentRoute = detectCurrentRoute();
 
   if (currentRoute !== lastDetectedRoute) {
+    if (currentRoute !== 'checkout') {
+      isPaying = false;
+    }
     routeChangeCount++;
     lastDetectedRoute = currentRoute;
     reactivateLockdown();
@@ -1386,6 +1351,7 @@ function mainLoop() {
   }
 
   if (currentRoute === 'success') {
+    isPaying = false;
     if (spawningPaused && !document.getElementById('redirect-warning')) {
       spawningPaused = false;
       const style = document.getElementById('hide-spawned-images');
@@ -1434,8 +1400,8 @@ function mainLoop() {
 
   if (currentRoute === 'checkout') {
     checkForDecline();
+    if (!selectCreditCard()) { setTimeout(mainLoop, 500); return; }
     clickPayNow();
-    checkLowBalance();
     trackSend();
   } else if (currentRoute === 'cart') {
     clickAddToCart();
@@ -1459,7 +1425,7 @@ function mainLoop() {
         style.textContent = '.spawned-image, .spawned-video { display: none !important; }';
       }
       stallTimerActive = false;
-    }, 12000);
+    }, 15000);
   }
 
   setTimeout(mainLoop, 3000);
