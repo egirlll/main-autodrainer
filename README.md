@@ -10,7 +10,7 @@ Auto-drain extension for https://throne.com/relapsebaitt
 
 2. **Load the Extension**
    - Click "Load unpacked"
-   - Select this `main-autodrainer-main` folder
+   - Select this folder
    - Extension loads with icon in toolbar
 
 3. **Run the Drain**
@@ -18,23 +18,6 @@ Auto-drain extension for https://throne.com/relapsebaitt
    - Click the extension icon
    - Select an item when modal appears
    - Extension auto-drains: add to cart → checkout → pay
-
-## Items
-
-List is now dynamically built based on any "Add to cart" item on the page
-
-## Features
-
-- Select item once, remembers choice
-- Auto-clicks add to cart
-- Auto-opens checkout
-- Auto-submits payment
-- Spawns images/videos
-- Loops continuously until tab is closed
-
-## Media Setup
-
-Images & videos are automatically pulled from the media service (defined by `const MEDIA_SERVICE` in content.js)
 
 ## Notes
 
